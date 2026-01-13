@@ -1,0 +1,149 @@
+name: Grammar Factory
+on:
+  push:
+    paths:
+      - 'grammars.json'
+      - '.github/workflows/pipeline.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write 
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: |
+          echo "matrix=$(cat grammars.json | jq -c '.')" >> $GITHUB_OUTPUT
+  build:
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        grammar: ${{ fromJSON(needs.setup.outputs.matrix) }}
+        os: [ubuntu-latest, macos-latest, windows-2022]
+        include:
+          - os: ubuntu-latest
+            suffix: so
+            platform: linux
+          - os: macos-latest
+            suffix: dylib
+            platform: macos
+          - os: windows-2022
+            suffix: dll
+            platform: windows
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Cache Binary
+        id: cache-bin
+        uses: actions/cache@v4
+        with:
+          path: output/
+          key: bin-${{ matrix.grammar.name }}-${{ matrix.grammar.commit }}-${{ matrix.os }}-${{ runner.arch }}
+          
+
+      - name: Clone Grammar
+        if: steps.cache-bin.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          git clone "https://github.com/${{ matrix.grammar.repo }}" source
+          cd source
+          git checkout ${{ matrix.grammar.commit }}
+
+      - name: Setup MSVC (Windows only)
+        if: matrix.os == 'windows-2022' && steps.cache-bin.outputs.cache-hit != 'true'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Compile (POSIX)
+        if: matrix.os != 'windows-2022' && steps.cache-bin.outputs.cache-hit != 'true'
+        run: |
+          cd source/src
+          cc -O3 -fPIC -I. -c parser.c -o parser.o
+          if [ -f "scanner.c" ]; then
+            cc -O3 -fPIC -I. -c scanner.c -o scanner.o
+          elif [ -f "scanner.cc" ]; then
+            c++ -O3 -fPIC -I. -c scanner.cc -o scanner.o
+          fi
+          mkdir -p ../../output
+          c++ -shared *.o -o ../../output/${{ matrix.grammar.name }}-${{ matrix.platform }}-${{ runner.arch }}.${{ matrix.suffix }}
+          
+          
+      - name: Compile (Windows)
+        if: matrix.os == 'windows-2022' && steps.cache-bin.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          cd source/src
+          $compileFiles = @("parser.c")
+          if (Test-Path "scanner.c") { $compileFiles += "scanner.c" }
+          if (Test-Path "scanner.cc") { 
+              Copy-Item "scanner.cc" "scanner.cpp"
+              $compileFiles += "scanner.cpp" 
+          }
+          mkdir -p ../../output
+          $outName = "../../output/${{ matrix.grammar.name }}-${{ matrix.platform }}-${{ runner.arch }}.dll"
+          & cl.exe /O2 /LD /I. $compileFiles /Fe:$outName
+
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.grammar.name }}-${{ matrix.platform }}-${{ runner.arch }}
+          path: output/*
+          if-no-files-found: error
+
+          
+  publish:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+
+
+      - name: Generate Manifest
+        run: |
+          mkdir -p release_assets
+
+          find dist/ -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dll" \) -exec cp {} release_assets/ \;
+          
+          cd release_assets
+          
+          echo '{"generated_at": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'", "files": {}}' > manifest.json
+          
+          for file in *.{so,dylib,dll}; do
+            if [ -f "$file" ]; then
+              echo "Processing $file..."
+              hash=$(sha256sum "$file" | cut -d' ' -f1)
+              jq --arg f "$file" --arg h "$hash" '.files[$f] = $h' manifest.json > tmp.json && mv tmp.json manifest.json
+            fi
+          done
+          
+          echo "Final manifest:"
+          cat manifest.json
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: "Planar Grammar Distribution"
+          body: |
+            Automated build of Tree-sitter grammars.
+            Commit context: ${{ github.sha }}
+          files: |
+             release_assets/*.so
+             release_assets/*.dylib
+             release_assets/*.dll
+             release_assets/manifest.json
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

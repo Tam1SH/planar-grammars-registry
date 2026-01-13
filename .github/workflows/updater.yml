@@ -1,0 +1,33 @@
+name: Watch Upstream
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for new commits
+        run: |
+          jq -c '.[]' grammars.json | while read -r grammar; do
+            NAME=$(echo $grammar | jq -r '.name')
+            REPO=$(echo $grammar | jq -r '.repo')
+            OLD_SHA=$(echo $grammar | jq -r '.commit')
+            NEW_SHA=$(git ls-remote https://github.com/$REPO HEAD | cut -f1 | cut -c1-7)
+            
+            if [ "$OLD_SHA" != "$NEW_SHA" ]; then
+              echo "Updating $NAME: $OLD_SHA -> $NEW_SHA"
+              sed -i "s/$OLD_SHA/$NEW_SHA/g" grammars.json
+            fi
+          done
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: update grammars to latest commits"
+          title: "Update Grammars"
+          body: "Automated update of tree-sitter grammars."
+          branch: "auto-update-grammars"

@@ -1,0 +1,12 @@
+[
+  { 
+    "name": "json", 
+    "repo": "tree-sitter/tree-sitter-json",
+    "commit": "001c28d7a29832b06b0e831ec77845553c89b56d" 
+  },
+  { 
+    "name": "yaml", 
+    "repo": "ikatyang/tree-sitter-yaml",
+    "commit": "0e36bed171768908f331ff7dff9d956bae016efb"
+  }
+]
