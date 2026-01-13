@@ -1,0 +1,117 @@
+name: Grammar Factory
+on:
+  push:
+    paths:
+      - 'grammars.json'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: set-matrix
+        run: |
+          # Компактно пакуем JSON в одну строку для матрицы
+          echo "matrix=$(cat grammars.json | jq -c '.')" >> $GITHUB_OUTPUT
+
+  build:
+    needs: setup
+    strategy:
+      fail-fast: false # Чтобы падение одной грамматики не рубило остальные
+      matrix:
+        grammar: ${{ fromJSON(needs.setup.outputs.matrix) }}
+        os: [ubuntu-latest, macos-latest, windows-2022]
+        include:
+          - os: ubuntu-latest
+            suffix: so
+            platform: linux
+          - os: macos-latest
+            suffix: dylib
+            platform: macos
+          - os: windows-2022
+            suffix: dll
+            platform: windows
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      # Клонируем основной репозиторий (где лежит скрипт или конфиги, если надо)
+      # Но саму грамматику клоним через обычный git
+      - name: Clone Grammar
+        run: |
+          git clone --depth 1 "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ matrix.grammar.repo }}.git" source
+
+      - name: Setup MSVC (Windows only)
+        if: matrix.os == 'windows-2022'
+        uses: ilammy/msvc-dev-cmd@v1
+        
+
+      - name: Compile (POSIX)
+        if: matrix.os != 'windows-2022'
+        run: |
+          cd source/src
+          # Компиляция с оптимизацией
+          cc -O3 -fPIC -I. -c parser.c -o parser.o
+          
+          # Проверяем наличие сканеров (бывают .c или .cc)
+          if [ -f "scanner.c" ]; then
+            cc -O3 -fPIC -I. -c scanner.c -o scanner.o
+          elif [ -f "scanner.cc" ]; then
+            c++ -O3 -fPIC -I. -c scanner.cc -o scanner.o
+          fi
+          
+          # Линковка
+          c++ -shared *.o -o ../../${{ matrix.grammar.name }}-${{ matrix.platform }}-${{ runner.arch }}.${{ matrix.suffix }}
+
+      - name: Compile (Windows)
+        if: matrix.os == 'windows-2022'
+        shell: pwsh
+        run: |
+          cd source/src
+          # Создаем массив файлов (в PowerShell это @(...))
+          $compileFiles = @("parser.c")
+          
+          if (Test-Path "scanner.c") { 
+              $compileFiles += "scanner.c" 
+          }
+          
+          if (Test-Path "scanner.cc") { 
+              Copy-Item "scanner.cc" "scanner.cpp"
+              $compileFiles += "scanner.cpp" 
+          }
+
+          $outName = "../../${{ matrix.grammar.name }}-${{ matrix.platform }}-${{ runner.arch }}.dll"
+          
+          # Передаем массив — PowerShell развернет его в отдельные аргументы для cl.exe
+          & cl.exe /O2 /LD /I. $compileFiles /Fe:$outName
+
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.grammar.name }}-${{ matrix.platform }}-${{ runner.arch }}
+          path: ${{ matrix.grammar.name }}-${{ matrix.platform }}-${{ runner.arch }}.${{ matrix.suffix }}
+
+  publish:
+    needs: [setup, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: "Grammar Distribution"
+          prerelease: false
+          # Заливаем все скомпиленные бинарники
+          files: |
+             */*.so
+             */*.dylib
+             */*.dll
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
