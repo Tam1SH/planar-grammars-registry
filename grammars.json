@@ -8,5 +8,10 @@
     "name": "yaml", 
     "repo": "ikatyang/tree-sitter-yaml",
     "commit": "0e36bed171768908f331ff7dff9d956bae016efb"
+  },
+  {
+    "name": "nginx",
+    "repo": "opa-oz/tree-sitter-nginx",
+    "commit": "47ade644d754cce57974aac44d2c9450e823d4f4"
   }
 ]
