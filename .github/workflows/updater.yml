@@ -31,6 +31,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v6
         with:
+          token: ${{ secrets.GH_PAT }}
           commit-message: "chore: update grammars to latest commits"
           title: "Update Grammars"
           body: "Automated update of tree-sitter grammars."
