@@ -72,7 +72,10 @@ jobs:
           mkdir -p ../../output
           c++ -shared *.o -o ../../output/${{ matrix.grammar.name }}-${{ matrix.platform }}-${{ runner.arch }}.${{ matrix.suffix }}
           
-          
+          if [ -f "node-types.json" ]; then
+            cp node-types.json ../../output/${{ matrix.grammar.name }}-node-types.json
+          fi
+
       - name: Compile (Windows)
         if: matrix.os == 'windows-2022' && steps.cache-bin.outputs.cache-hit != 'true'
         shell: pwsh
@@ -88,6 +91,10 @@ jobs:
           $outName = "../../output/${{ matrix.grammar.name }}-${{ matrix.platform }}-${{ runner.arch }}.dll"
           & cl.exe /O2 /LD /I. $compileFiles /Fe:$outName
 
+          if (Test-Path "node-types.json") {
+            Copy-Item "node-types.json" "../../output/${{ matrix.grammar.name }}-node-types.json"
+          }
+
           
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -102,26 +109,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       
       - name: Download All Artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist/
 
-
       - name: Generate Manifest
         run: |
           mkdir -p release_assets
 
-          find dist/ -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dll" \) -exec cp {} release_assets/ \;
+          find dist/ -type f \( -name "*.so" -o -name "*.dylib" -o -name "*.dll" -o -name "*.json" \) -exec cp {} release_assets/ \;
           
           cd release_assets
           
           echo '{"generated_at": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'", "files": {}}' > manifest.json
           
-          for file in *.{so,dylib,dll}; do
-            if [ -f "$file" ]; then
+          for file in *.{so,dylib,dll,json}; do
+            if [ -f "$file" ] && [ "$file" != "manifest.json" ]; then
               echo "Processing $file..."
               hash=$(sha256sum "$file" | cut -d' ' -f1)
               jq --arg f "$file" --arg h "$hash" '.files[$f] = $h' manifest.json > tmp.json && mv tmp.json manifest.json
@@ -138,12 +143,12 @@ jobs:
           name: "Planar Grammar Distribution"
           body: |
             Automated build of Tree-sitter grammars.
-            Commit context: ${{ github.sha }}
+            Includes dynamic libraries and node-types.json for each grammar.
           files: |
              release_assets/*.so
              release_assets/*.dylib
              release_assets/*.dll
-             release_assets/manifest.json
+             release_assets/*.json
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
