@@ -44,7 +44,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: output/
-          key: bin-${{ matrix.grammar.name }}-${{ matrix.grammar.commit }}-${{ matrix.os }}-${{ runner.arch }}
+          key: bin-${{ matrix.grammar.name }}-${{ matrix.grammar.commit }}-${{ matrix.os }}-${{ runner.arch }}-v2
           
 
       - name: Clone Grammar
