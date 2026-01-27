@@ -20,7 +20,7 @@
     "commit": "a82ed374f4cb58a1358dd6b26a7157bde1bca3b7"
   },
   {
-    "name": "go-template",
+    "name": "gotmpl",
     "repo": "ngalaiko/tree-sitter-go-template",
     "commit": "04270cd3512e2c7de0c5f2823725d7b0c4c01fda"
   }
