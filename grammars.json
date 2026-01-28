@@ -2,26 +2,26 @@
   { 
     "name": "json", 
     "repo": "tree-sitter/tree-sitter-json",
-    "commit": "001c28d7a29832b06b0e831ec77845553c89b56d" 
+    "commit": "001c28d" 
   },
   { 
     "name": "yaml", 
     "repo": "ikatyang/tree-sitter-yaml",
-    "commit": "0e36bed171768908f331ff7dff9d956bae016efb"
+    "commit": "0e36bed"
   },
   {
     "name": "nginx",
     "repo": "opa-oz/tree-sitter-nginx",
-    "commit": "47ade644d754cce57974aac44d2c9450e823d4f4"
+    "commit": "47ade64"
   },
   {
     "name": "jinja2",
     "repo": "dbt-labs/tree-sitter-jinja2",
-    "commit": "a82ed374f4cb58a1358dd6b26a7157bde1bca3b7"
+    "commit": "a82ed37"
   },
   {
     "name": "gotmpl",
     "repo": "ngalaiko/tree-sitter-go-template",
-    "commit": "04270cd3512e2c7de0c5f2823725d7b0c4c01fda"
+    "commit": "04270cd"
   }
 ]
